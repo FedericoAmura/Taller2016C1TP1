@@ -24,6 +24,7 @@
 #include <unistd.h>
 #include "socket.h"
 
+#define h_addr h_addr_list[0] /* backwards compatibility */
 #define BUFFER_LEN 1024
 #define EXIT_BAD_INVOCATION 1
 #define M 65536
@@ -282,6 +283,76 @@ int requestFileFromServer(char* hostname, char* port, char* old_local_file, char
 
 int main(int argc, char** argv) {
 	puts("Welcome to TP1");
+
+	int skt, numbytes;
+	/* ficheros descriptores */
+
+	char buf[100];
+	/* en donde es almacenará el texto recibido */
+
+	struct hostent *he;
+	/* estructura que recibirá información sobre el nodo remoto */
+
+	struct sockaddr_in server;
+	/* información sobre la dirección del servidor */
+
+	if (argc !=2) {
+		/* esto es porque nuestro programa sólo necesitará un
+	      argumento, (la IP) */
+		printf("Uso: %s <Dirección IP>\n",argv[0]);
+		exit(-1);
+	}
+
+
+	struct addrinfo hints;
+	struct addrinfo *result;
+
+	//socket_init();
+	if ((skt=socket(AF_INET, SOCK_STREAM, 0))==-1){
+		/* llamada a socket() */
+		printf("socket() error\n");
+		exit(-1);
+	}
+	//socket_connect();
+	memset(&hints, 0, sizeof(struct addrinfo));
+	hints.ai_family = AF_INET;       /* IPv4 (or AF_INET6 for IPv6)     */
+	hints.ai_socktype = SOCK_STREAM; /* TCP  (or SOCK_DGRAM for UDP)    */
+	hints.ai_flags = 0;              /* None (or AI_PASSIVE for server) */
+
+	//if ((he=gethostbyname(argv[1]))==NULL){
+	if (getaddrinfo(argv[2], "http", &hints, &result)==-1) {
+		/* llamada a gethostbyname() */
+		printf("gethostbyname() error\n");
+		exit(-1);
+	}
+
+	server.sin_family = AF_INET;
+	server.sin_port = htons(3550);
+	/* htons() es necesaria nuevamente ;-o */
+	server.sin_addr = *((struct in_addr *)he->h_addr);
+	/*he->h_addr pasa la información de ``*he'' a "h_addr" */
+	memset(&(server.sin_zero),0,8);
+
+	if(connect(skt, (struct sockaddr *)&server,
+			sizeof(struct sockaddr))==-1){
+		/* llamada a connect() */
+		printf("connect() error\n");
+		exit(-1);
+	}
+
+	if ((numbytes=recv(skt,buf,100,0)) == -1){
+		/* llamada a recv() */
+		printf("Error en recv() \n");
+		exit(-1);
+	}
+
+	buf[numbytes]='\0';
+
+	printf("Mensaje del Servidor: %s\n",buf);
+
+	close(skt);
+
+	return 0;
 
 	//verifico si me llamaron bien en modo server
 	if ((argc == 3) && (strncmp(argv[1], "server", 6) == 0)){

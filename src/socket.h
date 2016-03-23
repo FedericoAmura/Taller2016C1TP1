@@ -7,6 +7,14 @@
  *                DEFINICION DE LOS TIPOS DE DATOS
  * *****************************************************************/
 
+/* Se trata de un socket simplificado */
+
+struct socket {
+	int socketfd;	//file descriptor del socket
+	//struct hostent *he;	//estructura que recibira informacion sobre el nodo remoto
+	//struct sockaddr_in server;	//informacion sobre el servidor
+};
+
 typedef struct socket socket_t;
 
 /* ******************************************************************
@@ -19,7 +27,7 @@ typedef struct socket socket_t;
 // Crea un socket.
 // Pre: la memoria para el socket ya fue instanciada
 // Post: inicializa un socket.
-int socket_init(socket_t* this, char* port);
+int socket_init(socket_t* this);
 
 // Destruye un socket.
 // Pre: el socket esta inicializado
