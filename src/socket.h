@@ -34,10 +34,20 @@ int socket_init(socket_t* this);
 // Post: socket destruido
 int socket_destroy(socket_t* this);
 
+// Conecta un socket a una direccion y puerto especificados
+// Pre: el socket fue instanciado e inicializado
+// Post: socket conectado
+int socket_connect(socket_t* this, char* address, char* port);
+
 // Vincula un socket a un puerto.
 // Pre: la memoria para el socket ya fue instanciada y el puerto esta libre
 // Post: socket vinculado al puerto.
-int socket_bind_and_listen(socket_t* this, char* port);
+int socket_bind(socket_t* this, char* port);
+
+// Pone un socket a escuchar conexiones
+// Pre: socket listo, vinculado al puerto
+// Post: socket escuchando conexiones
+int socket_listen(socket_t* this, int cantidadClientes);
 
 // Envia datos por un socket
 // Pre: el socket esta inicializado

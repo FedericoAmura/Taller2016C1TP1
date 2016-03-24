@@ -99,42 +99,17 @@ int generateChecksum(char* buffer) {
 	return (lower + higher * M);
 }
 
-int startServerAndWaitRequestNEW(char* port){
-	/*printf("Me llamaron como server, apuntaria al puerto %s\n", port);
+int startServerAndWaitRequestTDA(char* port){
+	printf("Me llamaron como server, apuntaria al puerto %s\n", port);
 
-	char buffer[BUFFER_LEN];
-	int s = 0;
-	socket_t serverSkt;
-	socket_t clientSkt;
+	int aux;
+	char buffer[sizeof(int)];
+	socket_t skt;
 
-	if (!socket_init(&serverSkt, port)) {
-		exit(1);
-	}
+	aux = socket_init(&skt);
 
-	//bind and listen
-	if (!socket_bind_and_listen(&serverSkt, port)) {
-		exit(2);
-	}
 
-	//accept
-	if (!socket_accept(&serverSkt, &clientSkt)) {
-		exit(3);
-	}
-
-	//receive
-	memset(buffer, 0, BUFFER_LEN);
-	socket_receive(&serverSkt, buffer, 10);
-
-	s = strlen(buffer);
-	printf("Se recibieron %i bytes\n", s);
-	printf("El mensaje fue: %s\n", buffer);
-
-	s = socket_shutdown(&clientSkt);
-	s = socket_destroy(&clientSkt);
-	s = socket_shutdown(&serverSkt);
-	s = socket_destroy(&serverSkt);*/
-
-	return 1;
+	return 0;
 }
 
 int startServerAndWaitRequest(char* port){
@@ -231,10 +206,12 @@ int requestFileFromServer(char* hostname, char* port, char* old_local_file, char
 	printf("Remote file: %s\n", new_remote_file);
 	printf("Block size: %s\n", block_size);
 
+	int aux;
 	int blockSize = atoi(block_size);
 	int i = 0;
 	int checksum = 0;
 	char buffer[blockSize];
+	socket_t skt;
 
 	//abro file viejo
 	FILE *oldLocalFile = fopen(old_local_file, "r");
@@ -250,11 +227,10 @@ int requestFileFromServer(char* hostname, char* port, char* old_local_file, char
 	}
 
 	//conecto socket
-	//socket_t skt = socket();
-	//socket_init(&skt);
-	//socket_connect(&skt, hostname, port);
+	aux = socket_init(&skt);
+	aux = socket_connect(&skt,"127.0.0.1","4563"); //no me esta aceptando la conexion
 
-
+	//generacion y envio de checksums al server
 	fwrite("I - Mensaje - Checksum", sizeof(char), strlen("I - Mensaje - Checksum"), newLocalFile);
 	//genero checksums y los mando
 	while (fread(buffer, sizeof(char), blockSize, oldLocalFile) == blockSize) {
@@ -272,9 +248,11 @@ int requestFileFromServer(char* hostname, char* port, char* old_local_file, char
 		i++;
 	}
 
+	//etapa de recibir vistazos de checksums y literales
+	aux = socket_receive(&skt, buffer, 50);
+
 	//cierro socket y files
-	//socket_shutdown(&skt);
-	//socket_destroy(&skt);
+	aux = socket_destroy(&skt);
 	fclose(oldLocalFile);
 	fclose(newLocalFile);
 
@@ -284,21 +262,22 @@ int requestFileFromServer(char* hostname, char* port, char* old_local_file, char
 int main(int argc, char** argv) {
 	puts("Welcome to TP1");
 
+	/*puts("Primeros 100 bytes que mando desde el server");
+
 	int skt, numbytes;
-	/* ficheros descriptores */
+	// ficheros descriptores
 
 	char buf[100];
-	/* en donde es almacenará el texto recibido */
+	// en donde es almacenará el texto recibido
 
 	struct hostent *he;
-	/* estructura que recibirá información sobre el nodo remoto */
+	// estructura que recibirá información sobre el nodo remoto
 
 	struct sockaddr_in server;
-	/* información sobre la dirección del servidor */
+	// información sobre la dirección del servidor
 
 	if (argc !=2) {
-		/* esto es porque nuestro programa sólo necesitará un
-	      argumento, (la IP) */
+		// esto es porque nuestro programa sólo la IP
 		printf("Uso: %s <Dirección IP>\n",argv[0]);
 		exit(-1);
 	}
@@ -309,39 +288,37 @@ int main(int argc, char** argv) {
 
 	//socket_init();
 	if ((skt=socket(AF_INET, SOCK_STREAM, 0))==-1){
-		/* llamada a socket() */
 		printf("socket() error\n");
 		exit(-1);
 	}
 	//socket_connect();
 	memset(&hints, 0, sizeof(struct addrinfo));
-	hints.ai_family = AF_INET;       /* IPv4 (or AF_INET6 for IPv6)     */
-	hints.ai_socktype = SOCK_STREAM; /* TCP  (or SOCK_DGRAM for UDP)    */
-	hints.ai_flags = 0;              /* None (or AI_PASSIVE for server) */
+	hints.ai_family = AF_INET;       // IPv4 (or AF_INET6 for IPv6)
+	hints.ai_socktype = SOCK_STREAM; // TCP  (or SOCK_DGRAM for UDP)
+	hints.ai_flags = 0;              // None (or AI_PASSIVE for server)
 
-	//if ((he=gethostbyname(argv[1]))==NULL){
-	if (getaddrinfo(argv[2], "http", &hints, &result)==-1) {
-		/* llamada a gethostbyname() */
+	if ((he=gethostbyname(argv[1]))==NULL){
+	//if (getaddrinfo(argv[1], "http", &hints, &result)==-1) {
+		// llamada a gethostbyname()
 		printf("gethostbyname() error\n");
 		exit(-1);
 	}
 
 	server.sin_family = AF_INET;
 	server.sin_port = htons(3550);
-	/* htons() es necesaria nuevamente ;-o */
+	// htons() es necesaria nuevamente
 	server.sin_addr = *((struct in_addr *)he->h_addr);
-	/*he->h_addr pasa la información de ``*he'' a "h_addr" */
+	//he->h_addr pasa la información de ``*he'' a "h_addr"
 	memset(&(server.sin_zero),0,8);
 
 	if(connect(skt, (struct sockaddr *)&server,
 			sizeof(struct sockaddr))==-1){
-		/* llamada a connect() */
 		printf("connect() error\n");
 		exit(-1);
 	}
 
+	//socket_receive();
 	if ((numbytes=recv(skt,buf,100,0)) == -1){
-		/* llamada a recv() */
 		printf("Error en recv() \n");
 		exit(-1);
 	}
@@ -350,9 +327,9 @@ int main(int argc, char** argv) {
 
 	printf("Mensaje del Servidor: %s\n",buf);
 
+	//socket_destroy();
 	close(skt);
-
-	return 0;
+	 */
 
 	//verifico si me llamaron bien en modo server
 	if ((argc == 3) && (strncmp(argv[1], "server", 6) == 0)){
