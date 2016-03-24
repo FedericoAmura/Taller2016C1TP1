@@ -31,19 +31,90 @@
  *                    PRIMITIVAS DEL SOCKET
  * *****************************************************************/
 
-int socket_init(socket_t* this){
-	int aux = socket(AF_INET, SOCK_STREAM, 0);
-	if (aux==-1) {
+int socket_init_client(socket_t* this, char* protocol, char* hostname){
+	int aux;
+	struct addrinfo *result, *ptr;
+	bool are_we_connected;
+
+	//seteo filtros de configuracion
+	memset(&(this->hints), 0, sizeof(struct addrinfo));
+	(this->hints).ai_family = AF_INET;       /* IPv4 (or AF_INET6 for IPv6)     */
+	(this->hints).ai_socktype = SOCK_STREAM; /* TCP  (or SOCK_DGRAM for UDP)    */
+	(this->hints).ai_flags = 0;              /* None (or AI_PASSIVE for server) */
+
+	//busco resolver el destino
+	aux = getaddrinfo(hostname, protocol, &(this->hints), &result);
+	if (aux != 0) {
+		printf("Error in getaddrinfo: %s\n", gai_strerror(aux));
 		return SOCKET_ERROR_CREANDO;
 	}
 
+	//trato de crear el socket y conectar al servidor
+	for (ptr = result; ptr != NULL && are_we_connected == false; ptr = ptr->ai_next) {
+		aux = socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol);
+		if (aux == -1) {
+			printf("Error: %s\n", strerror(errno));
+		}
+		else
+		{
+			this->socketfd = aux;
+			aux = connect(this->socketfd, ptr->ai_addr, ptr->ai_addrlen);
+			if (aux == -1) {
+				printf("Error: %s\n", strerror(errno));
+				close(this->socketfd);
+			}
+			are_we_connected = (aux != -1); // seteamos flag si nos conectamos
+		}
+	}
+	freeaddrinfo(result);
+
+	if (are_we_connected == false) {
+		return SOCKET_ERROR_CREANDO; // nos quedamos sin direcciones
+	}
+
+	return SOCKET_NO_ERROR;
+}
+
+int socket_init_server(socket_t* this, char* protocol){
+	int aux;
+	struct addrinfo *ptr;
+
+	//seteo filtros de configuracion
+	memset(&(this->hints), 0, sizeof(struct addrinfo));
+	(this->hints).ai_family = AF_INET;       /* IPv4 (or AF_INET6 for IPv6)     */
+	(this->hints).ai_socktype = SOCK_STREAM; /* TCP  (or SOCK_DGRAM for UDP)    */
+	(this->hints).ai_flags = AI_PASSIVE;     /* AI_PASSIVE for server           */
+
+	//proceso mi propia address como server
+	aux = getaddrinfo(NULL, protocol, &(this->hints), &ptr);
+	if (aux != 0) {
+		printf("Error in getaddrinfo: %s\n", gai_strerror(aux));
+		return SOCKET_ERROR_CREANDO;
+	}
+
+	//genero el socket en cuestion
+	aux = socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol);
+	if (aux==-1) {
+		printf("Error: %s\n", strerror(errno));
+		freeaddrinfo(ptr);
+		return SOCKET_ERROR_CREANDO;
+	}
 	this->socketfd = aux;
-	return 0;
+
+	//asocio mi socket al puerto
+	aux = bind(this->socketfd, ptr->ai_addr, ptr->ai_addrlen);
+	if (aux == -1) {
+		printf("Error: %s\n", strerror(errno));
+		close(this->socketfd);
+		freeaddrinfo(ptr);
+		return 1;
+	}
+
+	freeaddrinfo(ptr);
+	return SOCKET_NO_ERROR;
 }
 
 int socket_destroy(socket_t* this){
-	//	free(this->ptr);
-	//	close(this->socketfd);
 	int aux = close(this->socketfd);
 	if (aux != 0) {
 		return SOCKET_ERROR_DESTRUYENDO;
@@ -52,47 +123,29 @@ int socket_destroy(socket_t* this){
 	return SOCKET_NO_ERROR;
 }
 
-int socket_connect(socket_t* this, char* address, char* port){
-	int aux = 0;
-	bool are_we_connected = false;
-	struct addrinfo hints;
-	struct addrinfo *result, *ptr;
-
-	memset(&hints, 0, sizeof(struct addrinfo));
-	hints.ai_family = AF_INET;       /* IPv4 (or AF_INET6 for IPv6)     */
-	hints.ai_socktype = SOCK_STREAM; /* TCP  (or SOCK_DGRAM for UDP)    */
-	hints.ai_flags = 0;              /* None (or AI_PASSIVE for server) */
-
-	aux = getaddrinfo(address, "http", &hints, &result);
-
-	if (aux != 0) {
-		printf("Error in getaddrinfo: %s\n", gai_strerror(aux));
-		return SOCKET_ERROR_CONECTANDO;
+int socket_accept(socket_t* this, socket_t* cliente){
+	int aux;
+	aux = accept(this->socketfd, NULL, NULL);
+	if (aux == -1) {
+		printf("Error: %s\n", strerror(errno));
+		return SOCKET_ERROR_ACCEPT;
 	}
 
-	for (ptr = result; ptr != NULL && are_we_connected == false; ptr = ptr->ai_next) {
-		aux = connect((this->socketfd), ptr->ai_addr, ptr->ai_addrlen);
-		if (aux == -1) {
-			printf("Error: %s\n", strerror(errno));
-		}
-		are_we_connected = (aux != -1); // flag para parar cuando conectamos
-	}
-
-	freeaddrinfo(result);
-
-	if (!are_we_connected) {
-		return SOCKET_ERROR_CONECTANDO;
-	}
-
+	cliente->socketfd = aux;
 	return SOCKET_NO_ERROR;
 }
 
-int socket_bind(socket_t* this, char* port){
-
-}
-
 int socket_listen(socket_t* this, int cantidadClientes){
+	int aux;
 
+	//pongo a escuchar clientes
+	aux = listen((this->socketfd), cantidadClientes);
+	if (aux == -1) {
+		printf("Error: %s\n", strerror(errno));
+		return SOCKET_ERROR_LISTEN;
+	}
+
+	return SOCKET_NO_ERROR;
 }
 
 int socket_send(socket_t* this, char* buffer, unsigned int size){
@@ -148,20 +201,6 @@ int socket_receive(socket_t* this, char* buffer, unsigned int size){
 	if (is_there_a_socket_error || is_the_remote_socket_closed  || (aux <= 0)) {
 		return SOCKET_ERROR_RECEIVE;
 	}
-	return SOCKET_NO_ERROR;
-}
-
-int socket_shutdown(socket_t* this){
-	return SOCKET_NO_ERROR;
-}
-
-
-int socket_accept(socket_t* this, socket_t* cliente){
-	//	int aux;
-	//	aux = accept(this->socketfd, NULL, NULL);
-	//	if (aux == -1) return SOCKET_ERROR_ACCEPT;
-	//
-	//	cliente->socketfd = aux;
 	return SOCKET_NO_ERROR;
 }
 
