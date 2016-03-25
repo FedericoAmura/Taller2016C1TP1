@@ -8,6 +8,9 @@
 #ifndef RSYNC_H_
 #define RSYNC_H_
 
+#include <stdio.h>
+#include <string.h>
+
 // Funcion que inicia un servidor donde puede actualizarse un file
 int startServerAndWaitRequestForFile(char* port);
 

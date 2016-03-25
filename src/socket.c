@@ -1,19 +1,5 @@
-#ifndef _POSIX_C_SOURCE
-#define _POSIX_C_SOURCE 1
-#endif
-
 #ifndef SOCKET_C
 #define SOCKET_C
-#include <stdio.h>
-#include <errno.h>
-#include <string.h>
-#include <stdlib.h>
-#include <stdbool.h>
-
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <unistd.h>
 #include "socket.h"
 
 #define SOCKET_NO_ERROR 0
@@ -151,12 +137,11 @@ int socket_listen(socket_t* this, int cantidadClientes){
 int socket_send(socket_t* this, char* buffer, unsigned int size){
 	int aux = 0;
 	int bytes_sent = 0;
-	int msg_len = strlen(buffer);
 	bool is_there_a_socket_error = false;
 	bool is_the_remote_socket_closed = false;
 
-	while (bytes_sent < msg_len && is_there_a_socket_error == false && is_the_remote_socket_closed == false) {
-		aux = send(this->socketfd, &buffer[bytes_sent], msg_len - bytes_sent, MSG_NOSIGNAL);
+	while (bytes_sent < size && is_there_a_socket_error == false && is_the_remote_socket_closed == false) {
+		aux = send(this->socketfd, &buffer[bytes_sent], size - bytes_sent, MSG_NOSIGNAL);
 
 		if (aux < 0) {  // ups,  hubo un error
 			printf("Error: %s\n", strerror(errno));
@@ -179,12 +164,11 @@ int socket_send(socket_t* this, char* buffer, unsigned int size){
 int socket_receive(socket_t* this, char* buffer, unsigned int size){
 	int aux = 0;
 	int bytes_received = 0;
-	int msg_len = strlen(buffer);
 	bool is_there_a_socket_error = false;
 	bool is_the_remote_socket_closed = false;
 
-	while (bytes_received < msg_len && is_there_a_socket_error == false && is_the_remote_socket_closed == false) {
-		aux = recv(this->socketfd, &buffer[bytes_received], msg_len - bytes_received, MSG_NOSIGNAL);
+	while (bytes_received < size && is_there_a_socket_error == false && is_the_remote_socket_closed == false) {
+		aux = recv(this->socketfd, &buffer[bytes_received], size - bytes_received, MSG_NOSIGNAL);
 
 		if (aux < 0) {  // ups,  hubo un error
 			printf("Error: %s\n", strerror(errno));
