@@ -71,4 +71,9 @@ int socket_send(socket_t* this, char* buffer, unsigned int size);
 // Post: datos recividos.
 int socket_receive(socket_t* this, char* buffer, unsigned int size);
 
+// Cierra la conexion de un socket
+// Pre: el socket esta inicializado y conectado
+// Post: el socket queda desconectado
+int socket_shutdown(socket_t* this);
+
 #endif // SOCKET_H

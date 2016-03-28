@@ -188,4 +188,8 @@ int socket_receive(socket_t* this, char* buffer, unsigned int size){
 	return SOCKET_NO_ERROR;
 }
 
+int socket_shutdown(socket_t* this) {
+	shutdown(this->socketfd, SHUT_RDWR);
+	return SOCKET_NO_ERROR;
+}
 #endif // SOCKET_C
