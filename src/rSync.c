@@ -52,7 +52,8 @@ int lista_tiene_checksum(lista_t *lista, int checksum) {
 
 	do {
 		i++;
-		if (lista_iter_ver_actual(iterador) != NULL && (*((int*)lista_iter_ver_actual(iterador)) == checksum))
+		if (lista_iter_ver_actual(iterador) != NULL &&
+				(*((int*)lista_iter_ver_actual(iterador)) == checksum))
 			checksumEncontrado = i;
 	} while ((lista_iter_avanzar(iterador) == 0) && (checksumEncontrado == 0));
 
@@ -60,29 +61,24 @@ int lista_tiene_checksum(lista_t *lista, int checksum) {
 	return checksumEncontrado;
 }
 
-int requestFileFromServer(char* hostname, char* port, char* old_local_file, char* new_local_file, char* new_remote_file, char* block_size) {
-	printf("Client parameters\n");
-	printf("Hostname: %s\n", hostname);
-	printf("Port: %s\n", port);
-	printf("Old file: %s\n", old_local_file);
-	printf("New file: %s\n", new_local_file);
-	printf("Remote file: %s\n", new_remote_file);
-	printf("Block size: %s\n", block_size);
-
-	int aux, len, blockSize, checksum, codeRecieved;
+int requestFileFromServer(char* hostname, char* port, char* old_local_file,
+		char* new_local_file, char* new_remote_file, char* block_size) {
+	int aux, len, blockSize, checksum, codeRecieved, fileBufferSize;
 	bool endOfUpdate;
 	char intBuffer[MAX_SMALL_BUF_LEN];
 	char flagBuffer;
 	char* fileBuffer;
 	socket_t skt;
 
-	printf("Opening file to update: %s\n", old_local_file);
+	memset(intBuffer, 0, MAX_SMALL_BUF_LEN);
+
+	// abro file a actualizar
 	FILE *oldLocalFile = fopen(old_local_file, "r");
 	if (oldLocalFile == NULL) {
 		return RSYNC_CLIENT_ERROR;
 	}
 
-	printf("Creating updated file: %s\n", new_local_file);
+	// inicio file actualizado
 	FILE *newLocalFile = fopen(new_local_file, "w");
 	if (newLocalFile == NULL) {
 		fclose(oldLocalFile);
@@ -91,7 +87,7 @@ int requestFileFromServer(char* hostname, char* port, char* old_local_file, char
 
 	blockSize = atoi(block_size);
 
-	printf("ConNecting to %s on port: %s\n", hostname, port);
+	// me conecto al servidor
 	aux = socket_init_client(&skt, port, hostname);
 	if (aux != 0) {
 		fclose(newLocalFile);
@@ -99,50 +95,51 @@ int requestFileFromServer(char* hostname, char* port, char* old_local_file, char
 		return RSYNC_CLIENT_ERROR;
 	}
 
-	printf("Asking for file: %s\n", new_remote_file);
+	// envio largo nombre y nombre file actualizado
 	len = strlen(new_remote_file);
 	snprintf(intBuffer, sizeof(intBuffer), FORMATO_NUMERICO_RSYNC, len);
 	aux = socket_send(&skt,intBuffer,4*sizeof(char));
 	aux = socket_send(&skt, new_remote_file, len);
 
-	printf("Sending blocksize\n");
+	// envio blocksize
 	snprintf(intBuffer, sizeof(intBuffer), FORMATO_NUMERICO_RSYNC, blockSize);
 	aux = socket_send(&skt,intBuffer,sizeof(int));
 
-	printf("Sending checksums\n");
+	// envio checksums
 	fileBuffer = (char*) calloc(blockSize+1,sizeof(char));
 	while (fread(fileBuffer, sizeof(char), blockSize, oldLocalFile) == blockSize) {
 		aux = socket_send(&skt,CODE_CHECKSUM,sizeof(char));
 		checksum = generateChecksum(fileBuffer);
+		checksum = htonl(checksum);
 		aux = socket_send(&skt,(char*)&checksum,4*sizeof(char));
 	}
 	aux = socket_send(&skt,CODE_END_OF_CHECKSUM_LIST,sizeof(char));
 
-	printf("Recreating file\n");
+	// recreo el archivo
 	free(fileBuffer);
-	fileBuffer = (char*) calloc(blockSize*2,sizeof(char));
+	fileBufferSize = 2*blockSize;
+	fileBuffer = (char*) calloc(fileBufferSize,sizeof(char));
 	endOfUpdate = false;
 	while (!endOfUpdate) {
 		aux = socket_receive(&skt, &flagBuffer, sizeof(char));
-		codeRecieved = atoi(&flagBuffer);
+		codeRecieved = flagBuffer - '0';
 		switch (codeRecieved) {
 		case CODE_INT_FOUND_CHECKSUM:
 			aux = socket_receive(&skt,intBuffer,4*sizeof(char));
 			len = blockSize;
 			checksum = atoi(intBuffer);
-			fseek(oldLocalFile, (checksum - 1) * blockSize, SEEK_SET);
-			fread(fileBuffer, sizeof(char), blockSize, oldLocalFile);
+			fseek(oldLocalFile, checksum * blockSize, SEEK_SET);
+			aux = fread(fileBuffer, sizeof(char), blockSize, oldLocalFile);
 			printf("RECV Block index %i\n", checksum);
 			break;
 		case CODE_INT_NEW_BYTES:
 			aux = socket_receive(&skt,intBuffer,4*sizeof(char));
 			len = atoi(intBuffer);
-			if (len >= strlen(fileBuffer)){
-				char* auxString = calloc(strlen(fileBuffer)*2,sizeof(char));
-				memcpy(auxString, fileBuffer, strlen(fileBuffer));
-				char* swap = fileBuffer;
+			if (len >= fileBufferSize){
+				fileBufferSize = len+1;
+				char* auxString = calloc(fileBufferSize,sizeof(char));
+				free(fileBuffer);
 				fileBuffer = auxString;
-				free(swap);
 			}
 			aux = socket_receive(&skt,fileBuffer,len);
 			printf("RECV File chunk %i bytes\n", len);
@@ -155,25 +152,23 @@ int requestFileFromServer(char* hostname, char* port, char* old_local_file, char
 		if (!endOfUpdate) fwrite(fileBuffer, sizeof(char), len, newLocalFile);
 		memset(fileBuffer, 0, strlen(fileBuffer));
 	}
-	printf("File recreated\n");
 
-	printf("Closing and destroying everything\n");
+	// cierro y libero recursos
 	free(fileBuffer);
+	aux = socket_shutdown(&skt);
 	aux = socket_destroy(&skt);
 	fclose(newLocalFile);
 	fclose(oldLocalFile);
 
-	printf("Exiting\n");
 	return RSYNC_NO_ERROR;
 }
 
 int startServerAndWaitRequestForFile(char* port){
-	printf("Server parameters\n");
-	printf("Port: %s\n", port);
 	int i, j, aux, fileNameLen, blockSize, checksum, fileNewDataLen;
 	int checksumEncontrado;
 	char intBuffer[MAX_SMALL_BUF_LEN];
-	char byteBuffer, letter;
+	char byteBuffer = EOF;
+	char letter = EOF;
 	char* fileBuffer;
 	char* fileName;
 	char* fileNewData;
@@ -181,26 +176,25 @@ int startServerAndWaitRequestForFile(char* port){
 	socket_t client;
 	lista_t* lista;
 
-	printf("Starting server on port: %s\n", port);
+	//inicio server en puerto
 	aux = socket_init_server(&server, port);
 	if (aux != 0) return RSYNC_SERVER_ERROR;
 
-	printf("Listening for a connection\n");
+	//espero cliente
 	aux = socket_listen(&server, 1);
 	if (aux != 0) {
 		socket_destroy(&server);
 		return RSYNC_SERVER_ERROR;
 	}
 
-	printf("Accepting next connection...\n");
+	//acepto cliente
 	aux = socket_accept(&server, &client);
 	if (aux != 0) {
 		socket_destroy(&server);
 		return RSYNC_SERVER_ERROR;
 	}
-	printf("Client connected\n");
 
-	printf("Getting filename length\n");
+	//consigo largo y nombre del archivo actualizado
 	memset(intBuffer, 0, MAX_SMALL_BUF_LEN);
 	aux = socket_receive(&client, intBuffer, MAX_SMALL_BUF_LEN-1);
 	if (aux != 0) {
@@ -209,8 +203,6 @@ int startServerAndWaitRequestForFile(char* port){
 		return RSYNC_SERVER_ERROR;
 	}
 	fileNameLen = atoi(intBuffer);
-	printf("Filename Length received: %i\n",fileNameLen);
-	printf("Getting filename\n");
 	fileName = (char*) calloc(fileNameLen+1,sizeof(char));
 	aux = socket_receive(&client, fileName, fileNameLen);
 	if (aux != 0) {
@@ -218,16 +210,14 @@ int startServerAndWaitRequestForFile(char* port){
 		socket_destroy(&server);
 		return RSYNC_SERVER_ERROR;
 	}
-	printf("Opening file: %s\n", fileName);
+	//abro file actualizado
 	FILE *localFile = fopen(fileName, "r");
 	if (localFile == NULL) {
 		socket_destroy(&client);
 		socket_destroy(&server);
 		return RSYNC_SERVER_ERROR;
 	}
-	printf("File opened\n");
-
-	printf("Getting block size\n");
+	//leo blocksize
 	aux = socket_receive(&client, intBuffer, MAX_SMALL_BUF_LEN-1);
 	if (aux != 0) {
 		fclose(localFile);
@@ -236,9 +226,8 @@ int startServerAndWaitRequestForFile(char* port){
 		return RSYNC_SERVER_ERROR;
 	}
 	blockSize = atoi(intBuffer);
-	printf("Block size received: %i\n",blockSize);
 
-	printf("Storing checksums received in list\n");
+	//recibo y guardo checksums cliente
 	lista = lista_crear();
 	while ((aux = socket_receive(&client, &byteBuffer, sizeof(char)))==0) {
 		if (byteBuffer=='1') {
@@ -259,16 +248,15 @@ int startServerAndWaitRequestForFile(char* port){
 		socket_destroy(&server);
 		return RSYNC_SERVER_ERROR;
 	}
-	printf("List of checksums complete\n");
 
-	printf("Generating and looking for checksums\n");
+	//empiezo a crear y comparar checksums locales
 	checksumEncontrado = 1;
 	fileNewData = (char*) calloc(30,sizeof(char));
 	fileBuffer = (char*) calloc(blockSize+1,sizeof(char));
 	j = 0;
 	while (true) {
 		i = 0;
-		//avanzamos ventana
+		//avanzamos ventana totalmente o solo un caracter
 		if (checksumEncontrado != 0) {
 			while (i < blockSize) {
 				letter = fgetc(localFile);
@@ -286,21 +274,26 @@ int startServerAndWaitRequestForFile(char* port){
 		//generamos su checksum y lo buscamos
 		checksum = generateChecksum(fileBuffer);
 		checksumEncontrado = lista_tiene_checksum(lista, checksum);
-		//enviamos lo nuevo si hace falta y el checksum encontrado
 		if ((checksumEncontrado != 0)) {
+			//enviamos lo nuevo si hace falta y el checksum encontrado
+			checksumEncontrado--; //fix porque numeran desde cero
 			fileNewDataLen = strlen(fileNewData);
 			if (fileNewDataLen != 0) {
 				aux = socket_send(&client, CODE_NEW_BYTES, 1);
-				snprintf(intBuffer, sizeof(intBuffer), FORMATO_NUMERICO_RSYNC, fileNewDataLen);
+				snprintf(intBuffer, sizeof(intBuffer),
+						FORMATO_NUMERICO_RSYNC, fileNewDataLen);
 				aux = socket_send(&client, intBuffer, 4*sizeof(char));
 				aux = socket_send(&client, fileNewData, fileNewDataLen);
 				memset(fileNewData,0,strlen(fileNewData));
 				j = 0;
 			}
 			aux = socket_send(&client, CODE_FOUND_CHECKSUM, 1);
-			snprintf(intBuffer, sizeof(intBuffer), FORMATO_NUMERICO_RSYNC, checksumEncontrado);
+			snprintf(intBuffer, sizeof(intBuffer),
+					FORMATO_NUMERICO_RSYNC, checksumEncontrado);
 			aux = socket_send(&client, intBuffer, 4*sizeof(char));
-		} else { //checksum no encontrado, agrego a nuevos datos
+			checksumEncontrado++; //deshago fix
+		} else {
+			//checksum no encontrado, agrego a nuevos datos
 			fileNewData[j] = fileBuffer[0];
 			j++;
 		}
@@ -312,28 +305,33 @@ int startServerAndWaitRequestForFile(char* port){
 		fileNewData[j] = fileBuffer[i];
 		i++; j++;
 	}
-	fileNewDataLen = strlen(fileNewData);
+	fileNewDataLen = 0;
+	while (fileNewData[fileNewDataLen] != EOF &&
+			fileNewData[fileNewDataLen] != '\0')
+		fileNewDataLen++;
 	if (fileNewDataLen != 0) {
 		aux = socket_send(&client, CODE_NEW_BYTES, 1);
-		snprintf(intBuffer, sizeof(intBuffer), FORMATO_NUMERICO_RSYNC, fileNewDataLen);
+		snprintf(intBuffer, sizeof(intBuffer),
+				FORMATO_NUMERICO_RSYNC, fileNewDataLen);
 		aux = socket_send(&client, intBuffer, 4*sizeof(char));
 		aux = socket_send(&client, fileNewData, fileNewDataLen);
 	}
 	aux = socket_send(&client, CODE_EOF, 1);
-	printf("Sent checksums found and new parts\n");
 
-	printf("Releasing resources\n");
 	//destruyo y libero toda la memoria utilizada
 	while (!lista_esta_vacia(lista)){
 		free((int*)lista_borrar_primero(lista));
 	}
 	lista_destruir(lista);
+	free(fileNewData);
+	free(fileBuffer);
 	free(fileName);
 	fclose(localFile);
+	aux = socket_shutdown(&client);
 	aux = socket_destroy(&client);
+	aux = socket_shutdown(&server);
 	aux = socket_destroy(&server);
 
-	printf("Exiting\n");
 	return RSYNC_NO_ERROR;
 }
 

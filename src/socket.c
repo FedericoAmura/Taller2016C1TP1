@@ -20,7 +20,7 @@
 int socket_init_client(socket_t* this, char* protocol, char* hostname){
 	int aux;
 	struct addrinfo *result, *ptr;
-	bool are_we_connected;
+	bool are_we_connected = false;
 
 	//seteo filtros de configuracion
 	memset(&(this->hints), 0, sizeof(struct addrinfo));
@@ -36,20 +36,19 @@ int socket_init_client(socket_t* this, char* protocol, char* hostname){
 	}
 
 	//trato de crear el socket y conectar al servidor
-	for (ptr = result; ptr != NULL && are_we_connected == false; ptr = ptr->ai_next) {
+	for (ptr = result; ptr != NULL && are_we_connected == false;
+			ptr = ptr->ai_next) {
 		aux = socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol);
 		if (aux == -1) {
 			printf("Error: %s\n", strerror(errno));
-		}
-		else
-		{
+		} else {
 			this->socketfd = aux;
 			aux = connect(this->socketfd, ptr->ai_addr, ptr->ai_addrlen);
 			if (aux == -1) {
 				printf("Error: %s\n", strerror(errno));
 				close(this->socketfd);
 			}
-			are_we_connected = (aux != -1); // seteamos flag si nos conectamos
+			are_we_connected = (aux != -1); // dejamos de iterar cdo nos conectamos
 		}
 	}
 	freeaddrinfo(result);
@@ -140,22 +139,24 @@ int socket_send(socket_t* this, char* buffer, unsigned int size){
 	bool is_there_a_socket_error = false;
 	bool is_the_remote_socket_closed = false;
 
-	while (bytes_sent < size && is_there_a_socket_error == false && is_the_remote_socket_closed == false) {
-		aux = send(this->socketfd, &buffer[bytes_sent], size - bytes_sent, MSG_NOSIGNAL);
+	while (bytes_sent < size &&
+			is_there_a_socket_error == false &&
+			is_the_remote_socket_closed == false) {
+		aux = send(this->socketfd, &buffer[bytes_sent],
+				size - bytes_sent, MSG_NOSIGNAL);
 
-		if (aux < 0) {  // ups,  hubo un error
+		if (aux < 0) {  // error al mandar
 			printf("Error: %s\n", strerror(errno));
 			is_there_a_socket_error = true;
-		}
-		else if (aux == 0) { // nos cerraron el socket :(
+		} else if (aux == 0) { // socket cerrado
 			is_the_remote_socket_closed = true;
-		}
-		else {
+		} else {
 			bytes_sent += aux;
 		}
 	}
 
-	if (is_there_a_socket_error || is_the_remote_socket_closed  || (aux <= 0)) {
+	if (is_there_a_socket_error || is_the_remote_socket_closed  ||
+			(aux <= 0)) {
 		return SOCKET_ERROR_SEND;
 	}
 	return SOCKET_NO_ERROR;
@@ -167,17 +168,18 @@ int socket_receive(socket_t* this, char* buffer, unsigned int size){
 	bool is_there_a_socket_error = false;
 	bool is_the_remote_socket_closed = false;
 
-	while (bytes_received < size && is_there_a_socket_error == false && is_the_remote_socket_closed == false) {
-		aux = recv(this->socketfd, &buffer[bytes_received], size - bytes_received, MSG_NOSIGNAL);
+	while (bytes_received < size &&
+			is_there_a_socket_error == false &&
+			is_the_remote_socket_closed == false) {
+		aux = recv(this->socketfd, &buffer[bytes_received],
+				size - bytes_received, MSG_NOSIGNAL);
 
-		if (aux < 0) {  // ups,  hubo un error
+		if (aux < 0) {  // error al recibir
 			printf("Error: %s\n", strerror(errno));
 			is_there_a_socket_error = true;
-		}
-		else if (aux == 0) { // nos cerraron el socket :(
+		} else if (aux == 0) { // socket cerrado
 			is_the_remote_socket_closed = true;
-		}
-		else {
+		} else {
 			bytes_received += aux;
 		}
 	}

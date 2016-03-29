@@ -13,8 +13,7 @@
  *                DEFINICION DE LOS TIPOS DE DATOS
  * *****************************************************************/
 
-/* Se trata de una cola que contiene datos de tipo void*
- * (punteros genéricos). */
+/* Se trata de una cola basica que contiene datos de tipo void* */
 
 typedef struct nodo_lista {
     void* datos;

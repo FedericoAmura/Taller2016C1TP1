@@ -17,17 +17,15 @@
 #define EXIT_BAD_INVOCATION 1
 
 int main(int argc, char** argv) {
-	puts("Welcome to TP1");
-
-	//verifico si me llamaron bien en modo server
+	//llamado como server
 	if ((argc == 3) && (strncmp(argv[1], "server", 6) == 0)){
 		return startServerAndWaitRequestForFile(argv[2]);
 	}
-	//verifico si me llamaron bien en modo server
+	//llamado como cliente
 	if ((argc == 8) && (strncmp(argv[1], "client", 6) == 0)){
-		return requestFileFromServer(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7]);
+		return requestFileFromServer(argv[2], argv[3], argv[4],
+				argv[5], argv[6], argv[7]);
 	}
 
-	puts("Me llamaron mal, salgo al choto!!");
 	return EXIT_BAD_INVOCATION;
 }
